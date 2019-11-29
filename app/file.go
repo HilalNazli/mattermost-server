@@ -87,7 +87,22 @@ func (a *App) FileReader(path string) (filesstore.ReadCloseSeeker, *model.AppErr
 	if err != nil {
 		return nil, err
 	}
-	return backend.Reader(path)
+
+	reader, err := backend.Reader(path)
+	if err != nil {
+		return nil, err
+	}
+
+	if pluginsEnvironment := a.GetPluginsEnvironment(); pluginsEnvironment != nil {
+		pluginContext := &plugin.Context{}
+
+		pluginsEnvironment.RunMultiPluginHook(func(hooks plugin.Hooks) bool {
+			hooks.FileWillBeRead(pluginContext, reader)
+			return true
+		}, plugin.FileWillBeReadId)
+	}
+
+	return reader, err
 }
 
 func (a *App) FileExists(path string) (bool, *model.AppError) {

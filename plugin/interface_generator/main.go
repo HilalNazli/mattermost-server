@@ -392,6 +392,7 @@ func getPluginPackageDir() string {
 func removeExcluded(info *PluginInterfaceInfo) *PluginInterfaceInfo {
 	toBeExcluded := func(item string) bool {
 		excluded := []string{
+			"FileWillBeRead",
 			"FileWillBeUploaded",
 			"Implemented",
 			"LoadPluginConfiguration",

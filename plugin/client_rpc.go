@@ -525,6 +525,58 @@ func (s *hooksRPCServer) FileWillBeUploaded(args *Z_FileWillBeUploadedArgs, retu
 	return nil
 }
 
+// FileWillBeRead is
+func init() {
+	hookNameToId["FileWillBeRead"] = FileWillBeReadId
+}
+
+type Z_FileWillBeReadArgs struct {
+	A *Context
+	fileStream uint32
+}
+
+type Z_FileWillBeReadReturns struct {
+}
+
+func (g *hooksRPCClient) FileWillBeRead(c *Context, file io.Reader){
+	fileStreamId := g.muxBroker.NextId()
+	go func() {
+		fileConnection, err := g.muxBroker.Accept(fileStreamId)
+		if err != nil {
+			g.log.Error("Plugin failed to serve read file stream. MuxBroker could not Accept connection", mlog.Err(err))
+			return
+		}
+		defer fileConnection.Close()
+		serveIOReader(file, fileConnection)
+	}()
+
+	_args := &Z_FileWillBeReadArgs{c, fileStreamId}
+	_returns := &Z_FileWillBeReadReturns{}
+	if err := g.client.Call("Plugin.FileWillBeRead", _args, _returns); err != nil {
+		g.log.Error("RPC call FileWillBeRead to plugin failed.", mlog.Err(err))
+	}
+	return
+}
+
+func (s *hooksRPCServer) FileWillBeRead(args *Z_FileWillBeReadArgs, returns *Z_FileWillBeReadReturns) error {
+	fileConnection, err := s.muxBroker.Dial(args.fileStream)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[ERROR] Can't connect to remote read file stream, error: %v", err.Error())
+		return err
+	}
+	defer fileConnection.Close()
+	fileReader := connectIOReader(fileConnection)
+	defer fileReader.Close()
+	if hook, ok := s.impl.(interface {
+		FileWillBeRead(c *Context, file io.Reader)
+	}); ok {
+		hook.FileWillBeRead(args.A, fileReader)
+	} else {
+		return fmt.Errorf("Hook FileWillBeRead called but not implemented.")
+	}
+	return nil
+}
+
 // MessageWillBePosted is in this file because of the difficulty of identifying which fields need special behaviour.
 // The special behaviour needed is decoding the returned post into the original one to avoid the unintentional removal
 // of fields by older plugins.
